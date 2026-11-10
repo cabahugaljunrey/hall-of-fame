@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PWA Auth App</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #121212; color: white; margin: 0; }
+    .card { background: #1e1e1e; padding: 2rem; border-radius: 8px; width: 300px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+    input { width: 100%; padding: 10px; margin: 8px 0; border-radius: 4px; border: 1px solid #333; background: #2a2a2a; color: white; box-sizing: border-box; }
+    button { width: 100%; padding: 10px; margin-top: 10px; border: none; border-radius: 4px; background: #007bff; color: white; cursor: pointer; font-weight: bold; }
+    button.alt { background: #333; margin-top: 5px; }
+    .msg { margin-top: 10px; font-size: 0.9rem; text-align: center; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h2 id="title">Sign In</h2>
+    <input type="text" id="username" placeholder="Username">
+    <input type="password" id="password" placeholder="Password">
+    <button onclick="handleSubmit()" id="mainBtn">Login</button>
+    <button class="alt" onclick="toggleMode()" id="toggleBtn">Need an account? Register</button>
+    <div id="status" class="msg"></div>
+  </div>
+
+  <script>
+    // Replace with your live Render backend URL once deployed
+    const BACKEND_URL = 'http://localhost:18080'; 
+    let isLogin = true;
+
+    function toggleMode() {
+      isLogin = !isLogin;
+      document.getElementById('title').innerText = isLogin ? 'Sign In' : 'Create Account';
+      document.getElementById('mainBtn').innerText = isLogin ? 'Login' : 'Register';
+      document.getElementById('toggleBtn').innerText = isLogin ? 'Need an account? Register' : 'Have an account? Login';
+    }
+
+    async function handleSubmit() {
+      const u = document.getElementById('username').value;
+      const p = document.getElementById('password').value;
+      const status = document.getElementById('status');
+      const endpoint = isLogin ? '/api/login' : '/api/register';
+
+      if (!u || !p) { status.innerText = 'Please fill out all fields.'; return; }
+
+      try {
+        const res = await fetch(BACKEND_URL + endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: u, password: p })
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+          status.style.color = '#00ff73';
+          status.innerText = data.message;
+          if (data.token) localStorage.setItem('auth_token', data.token);
+        } else {
+          status.style.color = '#ff4d4d';
+          status.innerText = data.error;
+        }
+      } catch (err) {
+        status.style.color = '#ff4d4d';
+        status.innerText = 'Server connection failed.';
+      }
+    }
+
+    // Register Service Worker for PWA
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+  </script>
+</body>
+</html>
