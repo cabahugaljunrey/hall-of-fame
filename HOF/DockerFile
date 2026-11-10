@@ -1,13 +1,28 @@
 FROM ubuntu:22.04
 
+# Prevent interactive prompts during apt install
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 1. Install build essentials, SQLite, SSL, and Boost/Asio dependencies
 RUN apt-get update && apt-get install -y \
-    g++ cmake libsqlite3-dev libssl-dev git build-essential
+    g++ \
+    cmake \
+    git \
+    libsqlite3-dev \
+    libssl-dev \
+    libasio-dev \
+    libboost-all-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# 2. Download Crow library headers into include directory
+RUN git clone --depth 1 https://github.com/CrowCpp/Crow.git /tmp/crow && \
+    cp -r /tmp/crow/include/* /usr/local/include/ && \
+    rm -rf /tmp/crow
 
 WORKDIR /app
 COPY . .
 
-# Compile your C++ server
-RUN g++ -O3 server.cpp -o server -lsqlite3 -lcrypto -lpthread
+# 3. Compile C++ code with C++17 standard and required library links
+RUN g++ -std=c++17 -O3 server.cpp -o server -lsqlite3 -lcrypto -lpthread
 
-EXPOSE 18080
 CMD ["./server"]
