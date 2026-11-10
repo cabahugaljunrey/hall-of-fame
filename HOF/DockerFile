@@ -1,0 +1,13 @@
+FROM ubuntu:22.04
+
+RUN apt-get update && apt-get install -y \
+    g++ cmake libsqlite3-dev libssl-dev git build-essential
+
+WORKDIR /app
+COPY . .
+
+# Compile your C++ server
+RUN g++ -O3 server.cpp -o server -lsqlite3 -lcrypto -lpthread
+
+EXPOSE 18080
+CMD ["./server"]
