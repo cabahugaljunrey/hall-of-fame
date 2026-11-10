@@ -5,6 +5,7 @@
 #include <openssl/evp.h>
 #include <iomanip>
 #include <sstream>
+#include <cstdlib>
 
 // Helper to hash password with a salt using SHA-256
 std::string hash_password(const std::string& password, const std::string& salt) {
@@ -25,7 +26,13 @@ std::string hash_password(const std::string& password, const std::string& salt) 
     return ss.str();
 }
 
-// Database Initialization
+// Add CORS headers to all responses
+void add_cors(crow::response& res) {
+    res.add_header("Access-Control-Allow-Origin", "*");
+    res.add_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+    res.add_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+}
+
 void init_db(sqlite3* db) {
     const char* sql = "CREATE TABLE IF NOT EXISTS users ("
                       "id INTEGER PRIMARY KEY AUTOINCREMENT, "
@@ -48,16 +55,34 @@ int main() {
     }
     init_db(db);
 
+    // OPTIONS preflight handlers for CORS
+    CROW_ROUTE(app, "/api/register").methods(crow::HTTPMethod::Options)([](const crow::request&){
+        crow::response res(204);
+        add_cors(res);
+        return res;
+    });
+
+    CROW_ROUTE(app, "/api/login").methods(crow::HTTPMethod::Options)([](const crow::request&){
+        crow::response res(204);
+        add_cors(res);
+        return res;
+    });
+
     // Register Endpoint
     CROW_ROUTE(app, "/api/register").methods(crow::HTTPMethod::Post)([&db](const crow::request& req) {
+        crow::response res;
+        add_cors(res);
+
         auto body = crow::json::load(req.body);
         if (!body || !body.has("username") || !body.has("password")) {
-            return crow::response(400, "{\"error\":\"Invalid payload\"}");
+            res.code = 400;
+            res.body = "{\"error\":\"Invalid payload\"}";
+            return res;
         }
 
         std::string username = body["username"].s();
         std::string password = body["password"].s();
-        std::string salt = "random_salt_value_123"; // Replace with dynamic salt generation per user
+        std::string salt = "random_salt_123";
         std::string hashed_pass = hash_password(password, salt);
 
         std::string query = "INSERT INTO users (username, password_hash, salt) VALUES (?, ?, ?);";
@@ -69,18 +94,27 @@ int main() {
 
         if (sqlite3_step(stmt) != SQLITE_DONE) {
             sqlite3_finalize(stmt);
-            return crow::response(409, "{\"error\":\"Username already exists\"}");
+            res.code = 409;
+            res.body = "{\"error\":\"Username already exists\"}";
+            return res;
         }
         sqlite3_finalize(stmt);
 
-        return crow::response(201, "{\"message\":\"Account created successfully\"}");
+        res.code = 201;
+        res.body = "{\"message\":\"Account created successfully\"}";
+        return res;
     });
 
     // Login Endpoint
     CROW_ROUTE(app, "/api/login").methods(crow::HTTPMethod::Post)([&db](const crow::request& req) {
+        crow::response res;
+        add_cors(res);
+
         auto body = crow::json::load(req.body);
         if (!body || !body.has("username") || !body.has("password")) {
-            return crow::response(400, "{\"error\":\"Invalid payload\"}");
+            res.code = 400;
+            res.body = "{\"error\":\"Invalid payload\"}";
+            return res;
         }
 
         std::string username = body["username"].s();
@@ -97,16 +131,26 @@ int main() {
             sqlite3_finalize(stmt);
 
             if (hash_password(password, stored_salt) == stored_hash) {
-                // In production, generate and return a signed JWT token here
-                return crow::response(200, "{\"message\":\"Login successful\", \"token\":\"user_auth_token_xyz\"}");
+                res.code = 200;
+                res.body = "{\"message\":\"Login successful\", \"token\":\"user_auth_token_xyz\"}";
+                return res;
             }
         } else {
             sqlite3_finalize(stmt);
         }
 
-        return crow::response(401, "{\"error\":\"Invalid username or password\"}");
+        res.code = 401;
+        res.body = "{\"error\":\"Invalid username or password\"}";
+        return res;
     });
 
-    app.port(18080).multithreaded().run();
+    // Determine port assigned by cloud environment
+    int port = 18080;
+    if (const char* env_p = std::getenv("PORT")) {
+        port = std::atoi(env_p);
+    }
+
+    std::cout << "Starting server on port " << port << std::endl;
+    app.port(port).multithreaded().run();
     sqlite3_close(db);
 }
